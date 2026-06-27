@@ -1,0 +1,55 @@
+# typed: strict
+# frozen_string_literal: true
+
+# Homebrew formula for the Docker Engine compatibility layer.
+class ContainerDockerAdapter < Formula
+  desc "Docker Engine API compatibility layer for Apple Container"
+  homepage "https://github.com/bytepengfei/container-docker-adapter"
+  url "__SOURCE_URL__"
+  version "__VERSION__"
+  sha256 "__SHA256__"
+  license "Apache-2.0"
+
+  depends_on "go" => :build
+  depends_on arch: :arm64
+  depends_on "container"
+  depends_on "docker"
+  depends_on :macos
+
+  def install
+    ldflags = %W[
+      -s -w
+      -X main.version=#{version}
+      -X main.commit=homebrew
+      -X main.buildTime=homebrew
+    ]
+    system "go", "build", *std_go_args(ldflags: ldflags), "./cmd/dockerd-compat"
+  end
+
+  def caveats
+    <<~EOS
+      Start Apple Container and the adapter service:
+        container system start
+        brew services start container-docker-adapter
+
+      Register and select the Docker context:
+        container-docker-adapter setup
+
+      Remove the context before uninstalling:
+        container-docker-adapter context remove
+        brew services stop container-docker-adapter
+    EOS
+  end
+
+  service do
+    run [opt_bin/"container-docker-adapter", "serve", "--wait-for-backend"]
+    environment_variables PATH: std_service_path_env
+    keep_alive true
+    log_path var/"log/container-docker-adapter.log"
+    error_log_path var/"log/container-docker-adapter.log"
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/container-docker-adapter version")
+  end
+end

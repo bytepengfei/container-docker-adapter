@@ -180,10 +180,50 @@ The important boundary is `internal/backend.Backend`. The Docker API layer shoul
 ## Requirements
 
 - Go 1.25 or newer
-- macOS for the intended Apple Container backend
-- Docker CLI if you want to test the Unix socket with Docker commands
+- Apple Silicon Mac
+- Apple Container 1.0.x
+- Docker CLI
 
-## Build
+## Install with Homebrew
+
+Install the adapter and its `docker` and `container` dependencies from the personal tap:
+
+```sh
+brew install bytepengfei/tap/container-docker-adapter
+```
+
+Start Apple Container first, then register the adapter as a login service:
+
+```sh
+container system start
+brew services start container-docker-adapter
+```
+
+Create and select the `apple-container` Docker context:
+
+```sh
+container-docker-adapter setup
+docker context show
+docker run --rm hello-world
+```
+
+`setup` is idempotent. Running it again updates the existing context to the current adapter socket.
+
+To switch away without uninstalling:
+
+```sh
+docker context use default
+```
+
+To remove the context and uninstall:
+
+```sh
+container-docker-adapter context remove
+brew services stop container-docker-adapter
+brew uninstall container-docker-adapter
+```
+
+## Build from Source
 
 ```sh
 go build ./cmd/dockerd-compat
@@ -195,17 +235,18 @@ If your Go build cache is outside a writable location, use a local cache:
 GOCACHE="$PWD/.gocache" go build ./cmd/dockerd-compat
 ```
 
-## Run
+## Run Manually
 
 Start the adapter with the default real Apple backend:
 
 ```sh
 container system start
-go run ./cmd/dockerd-compat \
+go run ./cmd/dockerd-compat serve \
   -backend apple \
-  -container-bin /usr/local/bin/container \
   -socket /tmp/docker-compat.sock
 ```
+
+The Apple CLI is discovered from `PATH`. Use `-container-bin` only to override it.
 
 The default socket is:
 
@@ -217,6 +258,12 @@ You can also set it with:
 
 ```sh
 DOCKER_COMPAT_SOCKET=/tmp/docker-compat.sock go run ./cmd/dockerd-compat
+```
+
+When managed by launchd, the adapter waits for Apple Container instead of exiting if the backend is not ready:
+
+```sh
+container-docker-adapter serve --wait-for-backend
 ```
 
 ## Smoke Test with curl
@@ -276,6 +323,67 @@ Or with a repository-local build cache:
 ```sh
 GOCACHE="$PWD/.gocache" go test ./...
 ```
+
+## Troubleshooting
+
+### Apple Container is not running
+
+```sh
+container system status
+container system start
+brew services restart container-docker-adapter
+```
+
+### Adapter socket is unavailable
+
+```sh
+brew services info container-docker-adapter
+tail -f "$(brew --prefix)/var/log/container-docker-adapter.log"
+curl --unix-socket "$HOME/.docker-compat/docker.sock" http://docker/_ping
+```
+
+Then rerun:
+
+```sh
+container-docker-adapter setup
+```
+
+### Wrong Docker context
+
+```sh
+docker context ls
+docker context use apple-container
+```
+
+Use `docker context use default` to return to the previous local Docker endpoint.
+
+### Context points to an old socket
+
+`setup` updates an existing context rather than creating a duplicate:
+
+```sh
+container-docker-adapter setup
+docker context inspect apple-container
+```
+
+### Unix socket path is too long
+
+macOS limits Unix socket path length. Keep custom paths short, for example:
+
+```sh
+container-docker-adapter serve --socket /tmp/apple-docker.sock
+container-docker-adapter setup --socket /tmp/apple-docker.sock
+```
+
+## Release
+
+Stable releases are created from `v*` tags. The release workflow:
+
+1. Runs the real Apple E2E suite on a self-hosted Apple Silicon runner labelled `apple-container`.
+2. Publishes darwin/arm64 binary and source archives with checksums.
+3. Updates `bytepengfei/homebrew-tap`.
+
+Configure a fine-grained `TAP_GITHUB_TOKEN` secret with Contents write access to the tap repository. Without the self-hosted E2E runner or tap token, a stable release intentionally cannot complete.
 
 ## Architecture
 

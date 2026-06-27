@@ -9,8 +9,12 @@ fi
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 socket="${TMPDIR:-/tmp}/container-docker-adapter-e2e-$$.sock"
 binary="${TMPDIR:-/tmp}/container-docker-adapter-e2e-$$"
+context="container-docker-adapter-e2e-$$"
+original_context=$(docker context show)
 
 cleanup() {
+  docker context use "$original_context" >/dev/null 2>&1 || true
+  docker context rm -f "$context" >/dev/null 2>&1 || true
   if [ -n "${server_pid:-}" ]; then
     kill "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
@@ -38,10 +42,12 @@ docker -H "unix://$socket" version >/dev/null
 docker -H "unix://$socket" info >/dev/null
 docker -H "unix://$socket" ps -a >/dev/null
 docker -H "unix://$socket" images >/dev/null
-output=$(docker -H "unix://$socket" run --rm hello-world)
+"$binary" setup --socket "$socket" --context "$context" >/dev/null
+test "$(docker context show)" = "$context"
+output=$(docker run --rm hello-world)
 printf '%s\n' "$output" | grep "Hello from Docker!" >/dev/null
 
-remaining=$(docker -H "unix://$socket" ps -aq)
+remaining=$(docker ps -aq)
 if [ -n "$remaining" ]; then
   echo "containers remain after docker run --rm: $remaining" >&2
   exit 1

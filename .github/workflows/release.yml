@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  apple-e2e:
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+      - apple-container
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Verify Apple Container system
+        run: container system status
+      - name: Run real Apple Container E2E
+        run: APPLE_CONTAINER_E2E=1 ./scripts/e2e-apple.sh
+
+  release:
+    needs:
+      - apple-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+      - name: Test
+        run: go test ./...
+      - name: Release artifacts
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.16.0
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check tap token
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: test -n "$TAP_GITHUB_TOKEN"
+      - name: Check out Homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: bytepengfei/homebrew-tap
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+          path: homebrew-tap
+      - name: Update Homebrew formula
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          asset="container-docker-adapter-${version}-source.tar.gz"
+          sha256="$(awk -v asset="$asset" '$2 == asset { print $1 }' dist/checksums.txt)"
+          test -n "$sha256"
+          url="https://github.com/bytepengfei/container-docker-adapter/releases/download/${RELEASE_TAG}/${asset}"
+          mkdir -p homebrew-tap/Formula
+          ./scripts/render-homebrew-formula.sh \
+            "$version" "$url" "$sha256" \
+            homebrew-tap/Formula/container-docker-adapter.rb
+      - name: Publish Homebrew formula
+        working-directory: homebrew-tap
+        run: |
+          git config user.name "container-docker-adapter release bot"
+          git config user.email "bytepengfei@users.noreply.github.com"
+          git add Formula/container-docker-adapter.rb
+          git commit -m "container-docker-adapter ${GITHUB_REF_NAME}"
+          git push
