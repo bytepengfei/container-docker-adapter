@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -59,6 +60,7 @@ func (c *ImageController) Create(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := c.backend.PullImage(r.Context(), ref, model.RegistryAuth{Raw: r.Header.Get("X-Registry-Auth")}, w); err != nil {
+		writeStreamError(w, err)
 		return
 	}
 }
@@ -88,13 +90,24 @@ func (c *ImageController) Push(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = c.backend.PushImage(r.Context(), ref, model.RegistryAuth{Raw: r.Header.Get("X-Registry-Auth")}, w)
+	if err := c.backend.PushImage(r.Context(), ref, model.RegistryAuth{Raw: r.Header.Get("X-Registry-Auth")}, w); err != nil {
+		writeStreamError(w, err)
+	}
 }
 
 func (c *ImageController) Load(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = c.backend.LoadImages(r.Context(), r.Body, w)
+	if err := c.backend.LoadImages(r.Context(), r.Body, w); err != nil {
+		writeStreamError(w, err)
+	}
+}
+
+func writeStreamError(w io.Writer, err error) {
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"errorDetail": map[string]string{"message": err.Error()},
+		"error":       err.Error(),
+	})
 }
 
 func (c *ImageController) Get(w http.ResponseWriter, r *http.Request) {

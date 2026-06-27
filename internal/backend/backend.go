@@ -16,6 +16,7 @@ type Backend interface {
 	Volumes
 	Networks
 	Auth
+	Build
 }
 
 type System interface {
@@ -30,6 +31,7 @@ type Containers interface {
 	InspectContainer(ctx context.Context, id string) (model.Container, error)
 	CreateContainer(ctx context.Context, spec model.ContainerSpec) (model.ContainerCreateResult, error)
 	StartContainer(ctx context.Context, id string) error
+	WaitContainer(ctx context.Context, id string, condition string) (model.ContainerWaitResult, error)
 	StopContainer(ctx context.Context, id string, opts model.StopOptions) error
 	RestartContainer(ctx context.Context, id string, opts model.StopOptions) error
 	KillContainer(ctx context.Context, id string, signal string) error
@@ -90,4 +92,9 @@ type Networks interface {
 
 type Auth interface {
 	Authenticate(ctx context.Context, auth model.RegistryAuth) (model.AuthResult, error)
+}
+
+type Build interface {
+	BuildImage(ctx context.Context, contextTar io.Reader, opts model.BuildOptions, out io.Writer) error
+	PruneBuildCache(ctx context.Context) (model.PruneResult, error)
 }

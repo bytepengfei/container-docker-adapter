@@ -29,6 +29,16 @@ func writeDockerStream(w http.ResponseWriter, r *http.Request, stream io.Reader,
 		if err := rw.Flush(); err != nil {
 			return err
 		}
+		if !tty {
+			var ready [8]byte
+			ready[0] = 1
+			if _, err := rw.Write(ready[:]); err != nil {
+				return err
+			}
+			if err := rw.Flush(); err != nil {
+				return err
+			}
+		}
 		return copyDockerStream(rw.Writer, stream, tty)
 	}
 

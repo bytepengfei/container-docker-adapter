@@ -65,6 +65,19 @@ func (c *ContainerController) Start(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (c *ContainerController) Wait(w http.ResponseWriter, r *http.Request) {
+	result, err := c.backend.WaitContainer(
+		r.Context(),
+		pathID(r.URL.Path, "/containers/", "/wait"),
+		r.URL.Query().Get("condition"),
+	)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (c *ContainerController) Stop(w http.ResponseWriter, r *http.Request) {
 	opts := stopOptions(r)
 	if err := c.backend.StopContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/stop"), opts); err != nil {

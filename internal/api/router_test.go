@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/bytepengfei/container-docker-adapter/internal/backend/memory"
@@ -100,6 +101,33 @@ func TestContainerLifecycleRoutes(t *testing.T) {
 	handler.ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, "/containers/demo?force=true", nil))
 	if remove.Code != http.StatusNoContent {
 		t.Fatalf("force remove status = %d, want %d", remove.Code, http.StatusNoContent)
+	}
+}
+
+func TestContainerWaitAllowsAutoRemove(t *testing.T) {
+	handler := NewRouter(memory.New())
+	id := createStartedContainer(t, handler, "wait-demo")
+
+	wait := httptest.NewRecorder()
+	handler.ServeHTTP(wait, httptest.NewRequest(http.MethodPost, "/v1.47/containers/"+id+"/wait?condition=not-running", nil))
+	if wait.Code != http.StatusOK {
+		t.Fatalf("wait status = %d, want %d; body=%s", wait.Code, http.StatusOK, wait.Body.String())
+	}
+	var result struct {
+		StatusCode int  `json:"StatusCode"`
+		Error      *any `json:"Error"`
+	}
+	if err := json.NewDecoder(wait.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.StatusCode != 0 || result.Error != nil {
+		t.Fatalf("wait result = %+v, want status 0 and null error", result)
+	}
+
+	remove := httptest.NewRecorder()
+	handler.ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, "/containers/"+id+"?v=true", nil))
+	if remove.Code != http.StatusNoContent {
+		t.Fatalf("auto-remove status = %d, want %d; body=%s", remove.Code, http.StatusNoContent, remove.Body.String())
 	}
 }
 
@@ -240,16 +268,16 @@ func assertDockerUpgrade(t *testing.T, handler http.Handler, path, body string) 
 		}
 	}
 
-	var header [8]byte
-	if _, err := io.ReadFull(reader, header[:]); err != nil {
-		t.Fatal(err)
-	}
-	if header[0] != 1 {
-		t.Fatalf("stream type = %d, want stdout (1)", header[0])
-	}
-	size := binary.BigEndian.Uint32(header[4:])
-	if size == 0 {
-		t.Fatal("stream frame payload is empty")
+	var size uint32
+	for size == 0 {
+		var header [8]byte
+		if _, err := io.ReadFull(reader, header[:]); err != nil {
+			t.Fatal(err)
+		}
+		if header[0] != 1 {
+			t.Fatalf("stream type = %d, want stdout (1)", header[0])
+		}
+		size = binary.BigEndian.Uint32(header[4:])
 	}
 	payload := make([]byte, size)
 	if _, err := io.ReadFull(reader, payload); err != nil {
@@ -359,6 +387,21 @@ func TestNotPlannedRoutesReturn501(t *testing.T) {
 		if rec.Code != http.StatusNotImplemented {
 			t.Fatalf("%s status = %d, want %d", path, rec.Code, http.StatusNotImplemented)
 		}
+	}
+}
+
+func TestBuildRoutes(t *testing.T) {
+	handler := NewRouter(memory.New())
+	build := httptest.NewRecorder()
+	handler.ServeHTTP(build, httptest.NewRequest(http.MethodPost, "/v1.47/build?t=demo:latest", bytes.NewBufferString("context")))
+	if build.Code != http.StatusOK || !strings.Contains(build.Body.String(), "Successfully built") {
+		t.Fatalf("build status=%d body=%q", build.Code, build.Body.String())
+	}
+
+	prune := httptest.NewRecorder()
+	handler.ServeHTTP(prune, httptest.NewRequest(http.MethodPost, "/build/prune", nil))
+	if prune.Code != http.StatusOK {
+		t.Fatalf("build prune status=%d body=%q", prune.Code, prune.Body.String())
 	}
 }
 

@@ -221,6 +221,25 @@ func (b *Backend) StartContainer(_ context.Context, id string) error {
 	return nil
 }
 
+func (b *Backend) WaitContainer(_ context.Context, id string, condition string) (model.ContainerWaitResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	container, err := b.container(id)
+	if err != nil {
+		return model.ContainerWaitResult{}, err
+	}
+	if container.State == "running" {
+		container.State = "exited"
+		container.Status = "Exited (0) less than a second ago"
+		b.containers[container.ID] = container
+	}
+	if condition == "removed" {
+		delete(b.containers, container.ID)
+	}
+	return model.ContainerWaitResult{StatusCode: 0}, nil
+}
+
 func (b *Backend) StopContainer(_ context.Context, id string, _ model.StopOptions) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -751,6 +770,18 @@ func (b *Backend) PruneNetworks(context.Context) (model.PruneResult, error) {
 
 func (b *Backend) Authenticate(context.Context, model.RegistryAuth) (model.AuthResult, error) {
 	return model.AuthResult{Status: "Login Succeeded"}, nil
+}
+
+func (b *Backend) BuildImage(_ context.Context, _ io.Reader, opts model.BuildOptions, out io.Writer) error {
+	tag := "memory:latest"
+	if len(opts.Tags) > 0 {
+		tag = opts.Tags[0]
+	}
+	return json.NewEncoder(out).Encode(map[string]string{"stream": "Successfully built " + tag + "\n"})
+}
+
+func (b *Backend) PruneBuildCache(context.Context) (model.PruneResult, error) {
+	return model.PruneResult{Deleted: []string{}}, nil
 }
 
 func (b *Backend) container(id string) (model.Container, error) {

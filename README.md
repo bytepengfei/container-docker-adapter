@@ -18,33 +18,12 @@ docker CLI / IDE / tooling
 
 ## Status
 
-This repository currently contains the first working skeleton:
+The adapter now has two backends:
 
-- Docker-compatible HTTP server over Unix socket
-- Docker API version prefix normalization, for example `/v1.47/version`
-- Basic system endpoints:
-  - `GET /_ping`
-  - `HEAD /_ping`
-  - `GET /version`
-  - `GET /info`
-- Basic container endpoints:
-  - `GET /containers/json`
-  - `POST /containers/create`
-  - `GET /containers/{id}/json`
-  - `POST /containers/{id}/start`
-  - `POST /containers/{id}/stop`
-  - `DELETE /containers/{id}`
-  - `GET /containers/{id}/logs`
-- Basic image endpoints:
-  - `GET /images/json`
-  - `POST /images/create`
-  - `DELETE /images/{id}`
-- Internal Docker response translators
-- Docker-style error responses for common failures
-- In-memory backend for local API development and tests
-- Apple backend package with client and translation entry points
+- `apple` (default): invokes Apple Container CLI 1.0.x without shell interpolation and runs real containers.
+- `memory`: deterministic simulation for unit tests and API development.
 
-The in-memory backend is only for development. It does not run real containers. Real Apple Container integration should be implemented under `internal/backend/apple`.
+The real Apple backend is verified for `docker version`, `docker ps -a`, and the complete `docker run --rm hello-world` workflow. Other routes have different verification levels in the matrix below.
 
 ## Docker Engine API Compatibility Target
 
@@ -69,8 +48,10 @@ The adapter advertises `ApiVersion: 1.47` and `MinAPIVersion: 1.24` from `GET /v
 
 Status meanings:
 
-- `Implemented`: The Docker API route exists and is covered by the current adapter shape. With the memory backend, behavior may be simulated.
-- `Planned`: The endpoint is in scope but not implemented yet.
+- `Route implemented`: The Docker API route exists, but the real Apple path may still return `501`.
+- `Contract tested`: Request/response behavior is covered by automated API or fake-CLI tests.
+- `CLI verified`: A real Docker CLI workflow passes against a non-Apple test backend.
+- `Apple verified`: A real Docker CLI workflow passes against Apple Container 1.0.x.
 - `Backend-dependent`: The Docker API route can be implemented only after the Apple Container backend exposes the required capability.
 - `Not planned`: The feature is outside the compatibility-layer goal or does not map cleanly to Apple Container.
 
@@ -78,94 +59,95 @@ Status meanings:
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `GET /_ping` | Docker CLI daemon probe | Returns `OK`. |
-| Implemented | `HEAD /_ping` | Docker CLI daemon probe | Returns Docker compatibility headers. |
-| Implemented | `GET /version` | `docker version` | Advertises API `1.47`, minimum API `1.24`. |
-| Implemented | `GET /info` | `docker info` | Returns adapter/backend info. |
+| Route implemented | `GET /_ping` | Docker CLI daemon probe | Returns `OK`. |
+| Route implemented | `HEAD /_ping` | Docker CLI daemon probe | Returns Docker compatibility headers. |
+| Apple verified | `GET /version` | `docker version` | Advertises API `1.47`, minimum API `1.24`, with Apple backend version data. |
+| Apple verified | `GET /info` | `docker info` | Aggregates real Apple container and image counts. |
 
 ### Containers
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `GET /containers/json` | `docker ps`, `docker container ls` | Memory backend lists simulated containers. |
-| Implemented | `POST /containers/create` | `docker create`, part of `docker run` | Memory backend creates simulated containers. |
-| Implemented | `GET /containers/{id}/json` | `docker inspect` | Basic inspect response shape exists. |
-| Implemented | `POST /containers/{id}/start` | `docker start`, part of `docker run` | Memory backend changes state to `running`. |
-| Implemented | `POST /containers/{id}/stop` | `docker stop` | Memory backend changes state to `exited`. |
-| Implemented | `DELETE /containers/{id}` | `docker rm` | Supports force/remove-volume flags at API shape level. |
-| Implemented | `GET /containers/{id}/logs` | `docker logs` | Route exists; real logs are backend-dependent. |
-| Implemented | `POST /containers/{id}/restart` | `docker restart` | Memory backend simulates stop/start. |
-| Implemented | `POST /containers/{id}/kill` | `docker kill` | Memory backend records an exited state. |
-| Implemented | `POST /containers/{id}/pause` | `docker pause` | Memory backend supports state transitions; Apple support is capability-dependent. |
-| Implemented | `POST /containers/{id}/unpause` | `docker unpause` | Memory backend supports state transitions; Apple support is capability-dependent. |
-| Implemented | `GET /containers/{id}/stats` | `docker stats` | Returns Docker-shaped metrics; live Apple metrics remain backend-dependent. |
-| Implemented | `GET /containers/{id}/top` | `docker top` | Returns Docker-shaped process data. |
-| Implemented | `GET /containers/{id}/changes` | `docker diff` | Route and translation exist; real change tracking is backend-dependent. |
-| Implemented | `GET /containers/{id}/archive` | `docker cp` from container | Streams a tar archive. |
-| Implemented | `PUT /containers/{id}/archive` | `docker cp` to container | Accepts a tar archive. |
-| Implemented | `POST /containers/{id}/attach` | `docker attach` | Supports Docker's `101 UPGRADED` handshake and multiplexed raw-stream output. |
-| Implemented | `POST /containers/{id}/resize` | `docker resize` | API shape exists; backend TTY support is required. |
-| Implemented | `POST /containers/prune` | `docker container prune` | Docker-compatible prune response fields are returned. |
+| Apple verified | `GET /containers/json` | `docker ps`, `docker container ls` | Parses Apple CLI 1.0 structured output. |
+| Apple verified | `POST /containers/create` | `docker create`, part of `docker run` | Maps image, command, environment, labels, workdir, TTY, and stdin flags. |
+| Route implemented | `GET /containers/{id}/json` | `docker inspect` | Basic inspect response shape exists. |
+| Apple verified | `POST /containers/{id}/start` | `docker start`, part of `docker run` | Uses an Apple CLI process session and streams real output. |
+| Apple verified | `POST /containers/{id}/wait` | `docker wait`, final step of attached `docker run` | Waits for the Apple init process and returns its exit status. |
+| Route implemented | `POST /containers/{id}/stop` | `docker stop` | Memory backend changes state to `exited`. |
+| Apple verified | `DELETE /containers/{id}` | `docker rm` | Verified as the final `--rm` step with no residual container. |
+| Contract tested | `GET /containers/{id}/logs` | `docker logs` | Apple backend supports snapshot and follow output. |
+| Route implemented | `POST /containers/{id}/restart` | `docker restart` | Memory backend simulates stop/start. |
+| Contract tested | `POST /containers/{id}/kill` | `docker kill` | Maps to `container kill`. |
+| Route implemented | `POST /containers/{id}/pause` | `docker pause` | Memory backend supports state transitions; Apple support is capability-dependent. |
+| Route implemented | `POST /containers/{id}/unpause` | `docker unpause` | Memory backend supports state transitions; Apple support is capability-dependent. |
+| Route implemented | `GET /containers/{id}/stats` | `docker stats` | Returns Docker-shaped metrics; live Apple metrics remain backend-dependent. |
+| Route implemented | `GET /containers/{id}/top` | `docker top` | Returns Docker-shaped process data. |
+| Route implemented | `GET /containers/{id}/changes` | `docker diff` | Route and translation exist; real change tracking is backend-dependent. |
+| Route implemented | `GET /containers/{id}/archive` | `docker cp` from container | Streams a tar archive. |
+| Route implemented | `PUT /containers/{id}/archive` | `docker cp` to container | Accepts a tar archive. |
+| Apple verified | `POST /containers/{id}/attach` | `docker attach` | Supports upgrade, multiplex framing, and real Apple process output. |
+| Route implemented | `POST /containers/{id}/resize` | `docker resize` | API shape exists; backend TTY support is required. |
+| Route implemented | `POST /containers/prune` | `docker container prune` | Docker-compatible prune response fields are returned. |
 
 ### Exec and Streaming
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `POST /containers/{id}/exec` | `docker exec` | Creates an exec session. |
-| Implemented | `POST /exec/{id}/start` | `docker exec` | Supports detached execution and Docker's upgraded multiplexed raw stream. |
-| Implemented | `GET /exec/{id}/json` | `docker inspect` for exec | Returns Docker-shaped exec state. |
-| Implemented | `POST /exec/{id}/resize` | `docker exec -it` resize | API shape exists; backend TTY support is required. |
-| Implemented | `GET /events` | `docker events` | Streams Docker-shaped event JSON. |
+| Contract tested | `POST /containers/{id}/exec` | `docker exec` | Creates an Apple CLI exec session. |
+| Contract tested | `POST /exec/{id}/start` | `docker exec` | Maps environment, user, workdir and TTY to `container exec`. |
+| Route implemented | `GET /exec/{id}/json` | `docker inspect` for exec | Returns Docker-shaped exec state. |
+| Route implemented | `POST /exec/{id}/resize` | `docker exec -it` resize | API shape exists; backend TTY support is required. |
+| Route implemented | `GET /events` | `docker events` | Streams Docker-shaped event JSON. |
 
 ### Images and Registry
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `GET /images/json` | `docker images`, `docker image ls` | Memory backend lists simulated images. |
-| Implemented | `POST /images/create` | `docker pull` | Memory backend simulates pull progress. |
-| Implemented | `DELETE /images/{id}` | `docker rmi` | Memory backend removes simulated images. |
-| Implemented | `GET /images/{id}/json` | `docker image inspect` | Returns Docker-shaped image metadata. |
-| Implemented | `GET /images/{id}/history` | `docker history` | Route exists; complete history remains backend-dependent. |
-| Implemented | `POST /images/{name}/push` | `docker push` | Streams backend push progress. |
-| Implemented | `POST /images/load` | `docker load` | Accepts an image archive and streams progress. |
-| Implemented | `GET /images/{name}/get` | `docker save` | Streams an image tar archive. |
-| Implemented | `POST /images/prune` | `docker image prune` | Returns Docker-compatible prune fields. |
+| Apple verified | `GET /images/json` | `docker images`, `docker image ls` | Parses Apple CLI 1.0 image metadata. |
+| Contract tested | `POST /images/create` | `docker pull` | Maps to `container image pull --progress plain`. |
+| Contract tested | `DELETE /images/{id}` | `docker rmi` | Maps to `container image delete`. |
+| Contract tested | `GET /images/{id}/json` | `docker image inspect` | Returns Docker-shaped Apple image metadata. |
+| Route implemented | `GET /images/{id}/history` | `docker history` | Route exists; complete history remains backend-dependent. |
+| Contract tested | `POST /images/{name}/push` | `docker push` | Maps to `container image push`. |
+| Contract tested | `POST /images/load` | `docker load` | Uses a private temporary archive with `container image load`. |
+| Contract tested | `GET /images/{name}/get` | `docker save` | Streams and removes a temporary OCI archive. |
+| Route implemented | `POST /images/prune` | `docker image prune` | Returns Docker-compatible prune fields. |
 
 ### Volumes
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `GET /volumes` | `docker volume ls` | Memory backend provides Docker-shaped volume data. |
-| Implemented | `POST /volumes/create` | `docker volume create` | Apple storage mapping remains backend-dependent. |
-| Implemented | `GET /volumes/{name}` | `docker volume inspect` | Apple storage mapping remains backend-dependent. |
-| Implemented | `DELETE /volumes/{name}` | `docker volume rm` | Apple storage mapping remains backend-dependent. |
-| Implemented | `POST /volumes/prune` | `docker volume prune` | Returns Docker-compatible prune fields. |
+| Contract tested | `GET /volumes` | `docker volume ls` | Parses Apple structured volume data. |
+| Contract tested | `POST /volumes/create` | `docker volume create` | Maps labels and driver options to Apple CLI. |
+| Contract tested | `GET /volumes/{name}` | `docker volume inspect` | Maps Apple volume configuration. |
+| Contract tested | `DELETE /volumes/{name}` | `docker volume rm` | Maps to `container volume delete`. |
+| Contract tested | `POST /volumes/prune` | `docker volume prune` | Maps to `container volume prune`. |
 
 ### Networks
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `GET /networks` | `docker network ls` | Memory backend includes bridge, host, and none networks. |
-| Implemented | `POST /networks/create` | `docker network create` | Apple networking mapping remains backend-dependent. |
-| Implemented | `GET /networks/{id}` | `docker network inspect` | Apple networking mapping remains backend-dependent. |
-| Implemented | `POST /networks/{id}/connect` | `docker network connect` | Apple networking mapping remains backend-dependent. |
-| Implemented | `POST /networks/{id}/disconnect` | `docker network disconnect` | Apple networking mapping remains backend-dependent. |
-| Implemented | `DELETE /networks/{id}` | `docker network rm` | Apple networking mapping remains backend-dependent. |
-| Implemented | `POST /networks/prune` | `docker network prune` | Returns Docker-compatible prune fields. |
+| Contract tested | `GET /networks` | `docker network ls` | Parses Apple structured network data. |
+| Contract tested | `POST /networks/create` | `docker network create` | Maps labels, internal mode, options and plugin. |
+| Contract tested | `GET /networks/{id}` | `docker network inspect` | Maps Apple network configuration. |
+| Route implemented | `POST /networks/{id}/connect` | `docker network connect` | Apple networking mapping remains backend-dependent. |
+| Route implemented | `POST /networks/{id}/disconnect` | `docker network disconnect` | Apple networking mapping remains backend-dependent. |
+| Contract tested | `DELETE /networks/{id}` | `docker network rm` | Maps to `container network delete`. |
+| Contract tested | `POST /networks/prune` | `docker network prune` | Maps to `container network prune`. |
 
 ### Build and Compose
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Backend-dependent | `POST /build` | `docker build` | Prefer integrating BuildKit or an Apple-supported build path instead of implementing a builder here. |
-| Backend-dependent | `POST /build/prune` | `docker builder prune` | Depends on build backend. |
+| Contract tested | `POST /build` | `docker build` | Safely extracts the context and maps options to `container build`. |
+| Contract tested | `POST /build/prune` | `docker builder prune` | Maps to `container builder prune`. |
 | Backend-dependent | Compose-used container/network/volume APIs | `docker compose` | Compose support should emerge from enough container, network, volume, logs, exec, and inspect compatibility. |
 
 ### Auth
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Implemented | `POST /auth` | `docker login` | Forwards the registry-auth payload; secure credential persistence remains backend-dependent. |
+| Contract tested | `POST /auth` | `docker login` | Sends the password through stdin to `container registry login`. |
 
 ### Not Planned or Not Implementable as an Adapter
 
@@ -215,10 +197,14 @@ GOCACHE="$PWD/.gocache" go build ./cmd/dockerd-compat
 
 ## Run
 
-Start the adapter on a user-owned Unix socket:
+Start the adapter with the default real Apple backend:
 
 ```sh
-go run ./cmd/dockerd-compat -socket /tmp/docker-compat.sock
+container system start
+go run ./cmd/dockerd-compat \
+  -backend apple \
+  -container-bin /usr/local/bin/container \
+  -socket /tmp/docker-compat.sock
 ```
 
 The default socket is:
@@ -261,23 +247,28 @@ docker ps
 docker images
 ```
 
-With the current memory backend, lifecycle commands are simulated:
+Run a real Apple Container through the Docker CLI:
 
 ```sh
-docker create --name demo hello-world:latest echo hello
-docker start demo
-docker ps
-docker inspect demo
-docker logs demo
-docker rm -f demo
+docker run --rm hello-world
 ```
 
-These commands validate the Docker API compatibility layer, not real container execution.
+To use the deterministic development backend instead:
+
+```sh
+go run ./cmd/dockerd-compat -backend memory -socket /tmp/docker-compat.sock
+```
 
 ## Test
 
 ```sh
 go test ./...
+```
+
+Real macOS E2E is opt-in and requires running Apple Container services:
+
+```sh
+APPLE_CONTAINER_E2E=1 ./scripts/e2e-apple.sh
 ```
 
 Or with a repository-local build cache:
@@ -323,7 +314,7 @@ The API layer exposes logs, attach, exec, and event streams with Docker content 
 
 ## MVP Roadmap
 
-Phases 1 through 4 and the volume/network API surface in Phase 5 are implemented against the memory backend. Production completion means replacing each Apple backend `ErrNotImplemented` stub with an `container-apiserver` call and validating behavior with the Docker CLI.
+The Apple CLI backend currently completes the core `docker run --rm` path. Items below are only complete when their matrix status reaches `Apple verified`; route-only memory simulations do not count as production completion.
 
 ### Phase 1: Read-only Docker CLI compatibility
 

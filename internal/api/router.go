@@ -18,6 +18,7 @@ type router struct {
 	volumes    *VolumeController
 	networks   *NetworkController
 	auth       *AuthController
+	build      *BuildController
 }
 
 func NewRouter(backend backend.Backend) http.Handler {
@@ -29,6 +30,7 @@ func NewRouter(backend backend.Backend) http.Handler {
 		volumes:    NewVolumeController(backend),
 		networks:   NewNetworkController(backend),
 		auth:       NewAuthController(backend),
+		build:      NewBuildController(backend),
 	}
 }
 
@@ -52,6 +54,8 @@ func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.containers.Inspect(w, req)
 	case req.Method == http.MethodPost && strings.HasPrefix(req.URL.Path, "/containers/") && strings.HasSuffix(req.URL.Path, "/start"):
 		r.containers.Start(w, req)
+	case req.Method == http.MethodPost && strings.HasPrefix(req.URL.Path, "/containers/") && strings.HasSuffix(req.URL.Path, "/wait"):
+		r.containers.Wait(w, req)
 	case req.Method == http.MethodPost && strings.HasPrefix(req.URL.Path, "/containers/") && strings.HasSuffix(req.URL.Path, "/stop"):
 		r.containers.Stop(w, req)
 	case req.Method == http.MethodPost && strings.HasPrefix(req.URL.Path, "/containers/") && strings.HasSuffix(req.URL.Path, "/restart"):
@@ -136,6 +140,10 @@ func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		r.networks.Prune(w, req)
 	case req.Method == http.MethodPost && req.URL.Path == "/auth":
 		r.auth.Auth(w, req)
+	case req.Method == http.MethodPost && req.URL.Path == "/build":
+		r.build.Build(w, req)
+	case req.Method == http.MethodPost && req.URL.Path == "/build/prune":
+		r.build.Prune(w, req)
 	case isNotPlanned(req.URL.Path):
 		writeNotImplemented(w, req.URL.Path)
 	default:

@@ -128,6 +128,15 @@ type ContainerCreateResult struct {
 	Warnings []string `json:"Warnings"`
 }
 
+type ContainerWaitResult struct {
+	StatusCode int                 `json:"StatusCode"`
+	Error      *ContainerWaitError `json:"Error"`
+}
+
+type ContainerWaitError struct {
+	Message string `json:"Message"`
+}
+
 type Image struct {
 	ID          string
 	RepoTags    []string
@@ -284,4 +293,15 @@ type ArchiveOptions struct {
 type ResizeOptions struct {
 	Height int
 	Width  int
+}
+
+type BuildOptions struct {
+	Tags       []string
+	Dockerfile string
+	NoCache    bool
+	Pull       bool
+	Target     string
+	Platform   string
+	BuildArgs  map[string]string
+	Labels     map[string]string
 }
