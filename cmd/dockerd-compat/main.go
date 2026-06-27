@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/pengfei/container-docker-adapter/internal/api"
-	"github.com/pengfei/container-docker-adapter/internal/backend/memory"
+	"github.com/bytepengfei/container-docker-adapter/internal/api"
+	"github.com/bytepengfei/container-docker-adapter/internal/backend/memory"
 )
 
 func main() {

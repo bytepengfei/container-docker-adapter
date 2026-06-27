@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	apperrors "github.com/pengfei/container-docker-adapter/internal/errors"
-	"github.com/pengfei/container-docker-adapter/internal/model"
+	apperrors "github.com/bytepengfei/container-docker-adapter/internal/errors"
+	"github.com/bytepengfei/container-docker-adapter/internal/model"
 )
 
 type Backend struct {

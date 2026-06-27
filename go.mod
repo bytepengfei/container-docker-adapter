@@ -1,3 +1,3 @@
-module github.com/pengfei/container-docker-adapter
+module github.com/bytepengfei/container-docker-adapter
 
 go 1.25

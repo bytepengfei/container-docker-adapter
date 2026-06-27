@@ -4,8 +4,8 @@ import (
 	"context"
 	"io"
 
-	apperrors "github.com/pengfei/container-docker-adapter/internal/errors"
-	"github.com/pengfei/container-docker-adapter/internal/model"
+	apperrors "github.com/bytepengfei/container-docker-adapter/internal/errors"
+	"github.com/bytepengfei/container-docker-adapter/internal/model"
 )
 
 type Client struct {
