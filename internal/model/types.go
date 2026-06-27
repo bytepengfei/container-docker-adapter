@@ -67,6 +67,7 @@ type Container struct {
 	Created time.Time
 	State   string
 	Status  string
+	Tty     bool
 	Ports   []Port
 	Labels  map[string]string
 	Mounts  []Mount

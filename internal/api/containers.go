@@ -154,15 +154,21 @@ func (c *ContainerController) PutArchive(w http.ResponseWriter, r *http.Request)
 }
 
 func (c *ContainerController) Attach(w http.ResponseWriter, r *http.Request) {
-	stream, err := c.backend.AttachContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/attach"), logOptions(r))
+	id := pathID(r.URL.Path, "/containers/", "/attach")
+	container, err := c.backend.InspectContainer(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	stream, err := c.backend.AttachContainer(r.Context(), id, logOptions(r))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	defer stream.Close()
-	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, stream)
+	if err := writeDockerStream(w, r, stream, container.Tty, true); err != nil {
+		return
+	}
 }
 
 func (c *ContainerController) Resize(w http.ResponseWriter, r *http.Request) {
@@ -186,16 +192,22 @@ func (c *ContainerController) Prune(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *ContainerController) Logs(w http.ResponseWriter, r *http.Request) {
-	logs, err := c.backend.ContainerLogs(r.Context(), pathID(r.URL.Path, "/containers/", "/logs"), logOptions(r))
+	id := pathID(r.URL.Path, "/containers/", "/logs")
+	container, err := c.backend.InspectContainer(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	logs, err := c.backend.ContainerLogs(r.Context(), id, logOptions(r))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	defer logs.Close()
 
-	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, logs)
+	if err := writeDockerStream(w, r, logs, container.Tty, false); err != nil {
+		return
+	}
 }
 
 func stopOptions(r *http.Request) model.StopOptions {

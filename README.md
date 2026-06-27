@@ -103,7 +103,7 @@ Status meanings:
 | Implemented | `GET /containers/{id}/changes` | `docker diff` | Route and translation exist; real change tracking is backend-dependent. |
 | Implemented | `GET /containers/{id}/archive` | `docker cp` from container | Streams a tar archive. |
 | Implemented | `PUT /containers/{id}/archive` | `docker cp` to container | Accepts a tar archive. |
-| Implemented | `POST /containers/{id}/attach` | `docker attach` | Raw-stream response exists; production hijacking depends on the Apple backend. |
+| Implemented | `POST /containers/{id}/attach` | `docker attach` | Supports Docker's `101 UPGRADED` handshake and multiplexed raw-stream output. |
 | Implemented | `POST /containers/{id}/resize` | `docker resize` | API shape exists; backend TTY support is required. |
 | Implemented | `POST /containers/prune` | `docker container prune` | Docker-compatible prune response fields are returned. |
 
@@ -112,7 +112,7 @@ Status meanings:
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
 | Implemented | `POST /containers/{id}/exec` | `docker exec` | Creates an exec session. |
-| Implemented | `POST /exec/{id}/start` | `docker exec` | Streams backend output using Docker's raw-stream content type. |
+| Implemented | `POST /exec/{id}/start` | `docker exec` | Supports detached execution and Docker's upgraded multiplexed raw stream. |
 | Implemented | `GET /exec/{id}/json` | `docker inspect` for exec | Returns Docker-shaped exec state. |
 | Implemented | `POST /exec/{id}/resize` | `docker exec -it` resize | API shape exists; backend TTY support is required. |
 | Implemented | `GET /events` | `docker events` | Streams Docker-shaped event JSON. |
@@ -319,7 +319,7 @@ Backend errors should be converted into Docker-compatible HTTP status codes and 
 
 ### Streaming
 
-The API layer exposes logs, attach, exec, and event streams with Docker content types and response shapes. The memory backend provides deterministic test streams. Long-lived streams, bidirectional stdin, and HTTP connection hijacking require the Apple backend transport.
+The API layer exposes logs, attach, exec, and event streams with Docker content types and response shapes. Attach and interactive exec requests support HTTP connection hijacking, and non-TTY output is encoded with Docker's 8-byte multiplex frame. The memory backend provides deterministic test streams. Long-lived stream lifecycle and bidirectional stdin still require a duplex Apple backend transport.
 
 ## MVP Roadmap
 

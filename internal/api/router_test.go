@@ -1,8 +1,12 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -182,6 +186,95 @@ func TestExecRoutes(t *testing.T) {
 	if inspect.Code != http.StatusOK {
 		t.Fatalf("exec inspect status = %d, want %d", inspect.Code, http.StatusOK)
 	}
+}
+
+func TestAttachAndExecUpgradeToDockerRawStream(t *testing.T) {
+	handler := NewRouter(memory.New())
+	createStartedContainer(t, handler, "stream-demo")
+
+	execCreate := httptest.NewRecorder()
+	handler.ServeHTTP(execCreate, httptest.NewRequest(http.MethodPost, "/containers/stream-demo/exec", bytes.NewBufferString(`{"Cmd":["echo","hi"],"AttachStdout":true}`)))
+	if execCreate.Code != http.StatusCreated {
+		t.Fatalf("exec create status = %d, want %d", execCreate.Code, http.StatusCreated)
+	}
+	var execSession struct {
+		ID string `json:"Id"`
+	}
+	if err := json.NewDecoder(execCreate.Body).Decode(&execSession); err != nil {
+		t.Fatal(err)
+	}
+
+	assertDockerUpgrade(t, handler, "/containers/stream-demo/attach?stream=1&stdout=1", "")
+	assertDockerUpgrade(t, handler, "/exec/"+execSession.ID+"/start", `{"Detach":false,"Tty":false}`)
+}
+
+func assertDockerUpgrade(t *testing.T, handler http.Handler, path, body string) {
+	t.Helper()
+	serverConn, clientConn := net.Pipe()
+	defer clientConn.Close()
+	writer := &hijackResponseWriter{header: make(http.Header), conn: serverConn}
+	request := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+	request.Header.Set("Connection", "Upgrade")
+	request.Header.Set("Upgrade", "tcp")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		handler.ServeHTTP(writer, request)
+	}()
+
+	reader := bufio.NewReader(clientConn)
+	status, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != "HTTP/1.1 101 UPGRADED\r\n" {
+		t.Fatalf("upgrade status = %q, want 101 UPGRADED", status)
+	}
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if line == "\r\n" {
+			break
+		}
+	}
+
+	var header [8]byte
+	if _, err := io.ReadFull(reader, header[:]); err != nil {
+		t.Fatal(err)
+	}
+	if header[0] != 1 {
+		t.Fatalf("stream type = %d, want stdout (1)", header[0])
+	}
+	size := binary.BigEndian.Uint32(header[4:])
+	if size == 0 {
+		t.Fatal("stream frame payload is empty")
+	}
+	payload := make([]byte, size)
+	if _, err := io.ReadFull(reader, payload); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+}
+
+type hijackResponseWriter struct {
+	header http.Header
+	conn   net.Conn
+}
+
+func (w *hijackResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *hijackResponseWriter) Write(payload []byte) (int, error) {
+	return w.conn.Write(payload)
+}
+
+func (w *hijackResponseWriter) WriteHeader(int) {}
+
+func (w *hijackResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return w.conn, bufio.NewReadWriter(bufio.NewReader(w.conn), bufio.NewWriter(w.conn)), nil
 }
 
 func TestVolumeNetworkAuthAndEventRoutes(t *testing.T) {

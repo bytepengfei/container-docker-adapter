@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 
 	"github.com/bytepengfei/container-docker-adapter/internal/backend"
@@ -26,6 +25,11 @@ type dockerExecCreateRequest struct {
 	Env          []string `json:"Env"`
 	WorkingDir   string   `json:"WorkingDir"`
 	User         string   `json:"User"`
+}
+
+type dockerExecStartRequest struct {
+	Detach bool `json:"Detach"`
+	Tty    bool `json:"Tty"`
 }
 
 func (r dockerExecCreateRequest) Model(containerID string) model.ExecConfig {
@@ -58,19 +62,23 @@ func (c *ExecController) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *ExecController) Start(w http.ResponseWriter, r *http.Request) {
-	var req dockerExecCreateRequest
+	var req dockerExecStartRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&req)
 	}
-	stream, err := c.backend.StartExec(r.Context(), pathID(r.URL.Path, "/exec/", "/start"), req.Model(""))
+	stream, err := c.backend.StartExec(r.Context(), pathID(r.URL.Path, "/exec/", "/start"), model.ExecConfig{Tty: req.Tty})
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	defer stream.Close()
-	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, stream)
+	if req.Detach {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if err := writeDockerStream(w, r, stream, req.Tty, true); err != nil {
+		return
+	}
 }
 
 func (c *ExecController) Inspect(w http.ResponseWriter, r *http.Request) {

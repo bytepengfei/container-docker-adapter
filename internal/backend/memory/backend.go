@@ -196,6 +196,7 @@ func (b *Backend) CreateContainer(_ context.Context, spec model.ContainerSpec) (
 		Created: time.Now().UTC(),
 		State:   "created",
 		Status:  "Created",
+		Tty:     spec.Tty,
 		Labels:  spec.Labels,
 	}
 	if container.Labels == nil {
