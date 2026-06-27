@@ -1,0 +1,3 @@
+.gocache/
+/dockerd-compat
+*.sock
