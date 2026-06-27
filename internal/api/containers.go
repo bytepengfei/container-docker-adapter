@@ -1,36 +1,20 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
 
+	"github.com/bytepengfei/container-docker-adapter/internal/backend"
 	"github.com/bytepengfei/container-docker-adapter/internal/model"
 )
 
 type ContainerController struct {
-	backend interface {
-		ListContainers(context.Context, model.ListContainersOptions) ([]model.Container, error)
-		InspectContainer(context.Context, string) (model.Container, error)
-		CreateContainer(context.Context, model.ContainerSpec) (model.ContainerCreateResult, error)
-		StartContainer(context.Context, string) error
-		StopContainer(context.Context, string, model.StopOptions) error
-		RemoveContainer(context.Context, string, model.RemoveOptions) error
-		ContainerLogs(context.Context, string, model.LogOptions) (io.ReadCloser, error)
-	}
+	backend backend.Backend
 }
 
-func NewContainerController(backend interface {
-	ListContainers(context.Context, model.ListContainersOptions) ([]model.Container, error)
-	InspectContainer(context.Context, string) (model.Container, error)
-	CreateContainer(context.Context, model.ContainerSpec) (model.ContainerCreateResult, error)
-	StartContainer(context.Context, string) error
-	StopContainer(context.Context, string, model.StopOptions) error
-	RemoveContainer(context.Context, string, model.RemoveOptions) error
-	ContainerLogs(context.Context, string, model.LogOptions) (io.ReadCloser, error)
-}) *ContainerController {
+func NewContainerController(backend backend.Backend) *ContainerController {
 	return &ContainerController{backend: backend}
 }
 
@@ -82,17 +66,145 @@ func (c *ContainerController) Start(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *ContainerController) Stop(w http.ResponseWriter, r *http.Request) {
+	opts := stopOptions(r)
+	if err := c.backend.StopContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/stop"), opts); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ContainerController) Restart(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.RestartContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/restart"), stopOptions(r)); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ContainerController) Kill(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.KillContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/kill"), r.URL.Query().Get("signal")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ContainerController) Pause(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.PauseContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/pause")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ContainerController) Unpause(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.UnpauseContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/unpause")); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (c *ContainerController) Stats(w http.ResponseWriter, r *http.Request) {
+	stats, err := c.backend.ContainerStats(r.Context(), pathID(r.URL.Path, "/containers/", "/stats"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, DockerContainerStats(stats))
+}
+
+func (c *ContainerController) Top(w http.ResponseWriter, r *http.Request) {
+	top, err := c.backend.ContainerTop(r.Context(), pathID(r.URL.Path, "/containers/", "/top"), r.URL.Query().Get("ps_args"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, top)
+}
+
+func (c *ContainerController) Changes(w http.ResponseWriter, r *http.Request) {
+	changes, err := c.backend.ContainerChanges(r.Context(), pathID(r.URL.Path, "/containers/", "/changes"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, changes)
+}
+
+func (c *ContainerController) GetArchive(w http.ResponseWriter, r *http.Request) {
+	archive, err := c.backend.GetContainerArchive(r.Context(), pathID(r.URL.Path, "/containers/", "/archive"), model.ArchiveOptions{Path: r.URL.Query().Get("path")})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer archive.Close()
+	w.Header().Set("Content-Type", "application/x-tar")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, archive)
+}
+
+func (c *ContainerController) PutArchive(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.PutContainerArchive(r.Context(), pathID(r.URL.Path, "/containers/", "/archive"), model.ArchiveOptions{Path: r.URL.Query().Get("path")}, r.Body); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (c *ContainerController) Attach(w http.ResponseWriter, r *http.Request) {
+	stream, err := c.backend.AttachContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/attach"), logOptions(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer stream.Close()
+	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, stream)
+}
+
+func (c *ContainerController) Resize(w http.ResponseWriter, r *http.Request) {
+	if err := c.backend.ResizeContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/resize"), model.ResizeOptions{
+		Height: parseInt(r.URL.Query().Get("h")),
+		Width:  parseInt(r.URL.Query().Get("w")),
+	}); err != nil {
+		writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (c *ContainerController) Prune(w http.ResponseWriter, r *http.Request) {
+	result, err := c.backend.PruneContainers(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, DockerPruneResult("container", result))
+}
+
+func (c *ContainerController) Logs(w http.ResponseWriter, r *http.Request) {
+	logs, err := c.backend.ContainerLogs(r.Context(), pathID(r.URL.Path, "/containers/", "/logs"), logOptions(r))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer logs.Close()
+
+	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, logs)
+}
+
+func stopOptions(r *http.Request) model.StopOptions {
 	var timeout *int
 	if raw := r.URL.Query().Get("t"); raw != "" {
 		value := parseInt(raw)
 		timeout = &value
 	}
-
-	if err := c.backend.StopContainer(r.Context(), pathID(r.URL.Path, "/containers/", "/stop"), model.StopOptions{TimeoutSeconds: timeout}); err != nil {
-		writeError(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
+	return model.StopOptions{TimeoutSeconds: timeout}
 }
 
 func (c *ContainerController) Remove(w http.ResponseWriter, r *http.Request) {
@@ -106,8 +218,8 @@ func (c *ContainerController) Remove(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (c *ContainerController) Logs(w http.ResponseWriter, r *http.Request) {
-	logs, err := c.backend.ContainerLogs(r.Context(), pathID(r.URL.Path, "/containers/", "/logs"), model.LogOptions{
+func logOptions(r *http.Request) model.LogOptions {
+	return model.LogOptions{
 		Follow:     parseBool(r.URL.Query().Get("follow")),
 		Stdout:     parseBool(r.URL.Query().Get("stdout")),
 		Stderr:     parseBool(r.URL.Query().Get("stderr")),
@@ -115,16 +227,7 @@ func (c *ContainerController) Logs(w http.ResponseWriter, r *http.Request) {
 		Until:      r.URL.Query().Get("until"),
 		Timestamps: parseBool(r.URL.Query().Get("timestamps")),
 		Tail:       r.URL.Query().Get("tail"),
-	})
-	if err != nil {
-		writeError(w, err)
-		return
 	}
-	defer logs.Close()
-
-	w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, logs)
 }
 
 func parseBool(value string) bool {

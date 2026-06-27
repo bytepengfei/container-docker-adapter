@@ -65,6 +65,43 @@ type dockerImageSummary struct {
 	Containers  int64             `json:"Containers"`
 }
 
+type dockerImageInspect struct {
+	ID           string            `json:"Id"`
+	RepoTags     []string          `json:"RepoTags"`
+	RepoDigests  []string          `json:"RepoDigests"`
+	Created      string            `json:"Created"`
+	Size         int64             `json:"Size"`
+	VirtualSize  int64             `json:"VirtualSize"`
+	Labels       map[string]string `json:"Labels"`
+	Architecture string            `json:"Architecture"`
+	Os           string            `json:"Os"`
+}
+
+type dockerVolume struct {
+	Name       string            `json:"Name"`
+	Driver     string            `json:"Driver"`
+	Mountpoint string            `json:"Mountpoint"`
+	CreatedAt  string            `json:"CreatedAt"`
+	Labels     map[string]string `json:"Labels"`
+	Options    map[string]string `json:"Options"`
+	Scope      string            `json:"Scope"`
+}
+
+type dockerNetwork struct {
+	Name       string            `json:"Name"`
+	ID         string            `json:"Id"`
+	Created    string            `json:"Created"`
+	Scope      string            `json:"Scope"`
+	Driver     string            `json:"Driver"`
+	EnableIPv6 bool              `json:"EnableIPv6"`
+	Internal   bool              `json:"Internal"`
+	Attachable bool              `json:"Attachable"`
+	Ingress    bool              `json:"Ingress"`
+	Labels     map[string]string `json:"Labels"`
+	Options    map[string]string `json:"Options"`
+	Containers map[string]any    `json:"Containers"`
+}
+
 type dockerContainerCreateRequest struct {
 	Image      string            `json:"Image"`
 	Cmd        []string          `json:"Cmd"`
@@ -154,6 +191,114 @@ func DockerImages(images []model.Image) []dockerImageSummary {
 	return out
 }
 
+func DockerImageInspect(image model.Image) dockerImageInspect {
+	return dockerImageInspect{
+		ID:           image.ID,
+		RepoTags:     nonNilSlice(image.RepoTags),
+		RepoDigests:  nonNilSlice(image.RepoDigests),
+		Created:      image.Created.UTC().Format(time.RFC3339Nano),
+		Size:         image.Size,
+		VirtualSize:  image.VirtualSize,
+		Labels:       nonNilMap(image.Labels),
+		Architecture: "arm64",
+		Os:           "linux",
+	}
+}
+
+func DockerContainerStats(stats model.ContainerStats) map[string]any {
+	return map[string]any{
+		"read": stats.Read.UTC().Format(time.RFC3339Nano),
+		"id":   stats.ID,
+		"name": stats.Name,
+		"cpu_stats": map[string]any{
+			"cpu_usage":        map[string]any{"total_usage": stats.CPUUsage},
+			"system_cpu_usage": stats.SystemUsage,
+		},
+		"precpu_stats": map[string]any{},
+		"memory_stats": map[string]any{
+			"usage": stats.MemoryUsage,
+			"limit": stats.MemoryLimit,
+		},
+		"networks": map[string]any{},
+	}
+}
+
+func DockerPruneResult(kind string, result model.PruneResult) map[string]any {
+	field := map[string]string{
+		"container": "ContainersDeleted",
+		"image":     "ImagesDeleted",
+		"volume":    "VolumesDeleted",
+		"network":   "NetworksDeleted",
+	}[kind]
+	return map[string]any{
+		field:            nonNilSlice(result.Deleted),
+		"SpaceReclaimed": result.SpaceReclaimed,
+	}
+}
+
+func DockerExecInspect(session model.ExecSession) map[string]any {
+	return map[string]any{
+		"ID":       session.ID,
+		"Running":  session.Running,
+		"ExitCode": session.ExitCode,
+		"ProcessConfig": map[string]any{
+			"entrypoint": firstOrEmpty(session.Config.Cmd),
+			"arguments":  restOrEmpty(session.Config.Cmd),
+			"tty":        session.Config.Tty,
+			"user":       session.Config.User,
+		},
+		"OpenStdin":   session.Config.AttachStdin,
+		"OpenStderr":  session.Config.AttachStderr,
+		"OpenStdout":  session.Config.AttachStdout,
+		"CanRemove":   true,
+		"ContainerID": session.ContainerID,
+	}
+}
+
+func DockerVolumes(volumes []model.Volume) []dockerVolume {
+	out := make([]dockerVolume, 0, len(volumes))
+	for _, volume := range volumes {
+		out = append(out, DockerVolume(volume))
+	}
+	return out
+}
+
+func DockerVolume(volume model.Volume) dockerVolume {
+	return dockerVolume{
+		Name:       volume.Name,
+		Driver:     defaultString(volume.Driver, "local"),
+		Mountpoint: volume.Mountpoint,
+		CreatedAt:  volume.Created.UTC().Format(time.RFC3339Nano),
+		Labels:     nonNilMap(volume.Labels),
+		Options:    nonNilMap(volume.Options),
+		Scope:      defaultString(volume.Scope, "local"),
+	}
+}
+
+func DockerNetworks(networks []model.Network) []dockerNetwork {
+	out := make([]dockerNetwork, 0, len(networks))
+	for _, network := range networks {
+		out = append(out, DockerNetwork(network))
+	}
+	return out
+}
+
+func DockerNetwork(network model.Network) dockerNetwork {
+	return dockerNetwork{
+		Name:       network.Name,
+		ID:         network.ID,
+		Created:    network.Created.UTC().Format(time.RFC3339Nano),
+		Scope:      defaultString(network.Scope, "local"),
+		Driver:     defaultString(network.Driver, "bridge"),
+		Internal:   network.Internal,
+		Attachable: network.Attachable,
+		Ingress:    network.Ingress,
+		Labels:     nonNilMap(network.Labels),
+		Options:    nonNilMap(network.Options),
+		Containers: map[string]any{},
+	}
+}
+
 func dockerNames(names []string) []string {
 	out := make([]string, 0, len(names))
 	for _, name := range names {
@@ -181,4 +326,25 @@ func nonNilSlice(value []string) []string {
 		return []string{}
 	}
 	return value
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func firstOrEmpty(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return values[0]
+}
+
+func restOrEmpty(values []string) []string {
+	if len(values) <= 1 {
+		return []string{}
+	}
+	return values[1:]
 }

@@ -72,6 +72,26 @@ type Container struct {
 	Mounts  []Mount
 }
 
+type ContainerChange struct {
+	Path string `json:"Path"`
+	Kind int    `json:"Kind"`
+}
+
+type ContainerTop struct {
+	Titles    []string   `json:"Titles"`
+	Processes [][]string `json:"Processes"`
+}
+
+type ContainerStats struct {
+	ID          string
+	Name        string
+	Read        time.Time
+	CPUUsage    uint64
+	SystemUsage uint64
+	MemoryUsage uint64
+	MemoryLimit uint64
+}
+
 type Port struct {
 	IP          string
 	PrivatePort uint16
@@ -124,6 +144,97 @@ type ImageDelete struct {
 	Deleted  string `json:"Deleted,omitempty"`
 }
 
+type ImageHistory struct {
+	ID        string   `json:"Id"`
+	Created   int64    `json:"Created"`
+	CreatedBy string   `json:"CreatedBy"`
+	Tags      []string `json:"Tags"`
+	Size      int64    `json:"Size"`
+	Comment   string   `json:"Comment"`
+}
+
+type Volume struct {
+	Name       string
+	Driver     string
+	Mountpoint string
+	Created    time.Time
+	Labels     map[string]string
+	Options    map[string]string
+	Scope      string
+}
+
+type VolumeSpec struct {
+	Name       string
+	Driver     string
+	DriverOpts map[string]string
+	Labels     map[string]string
+}
+
+type Network struct {
+	ID         string
+	Name       string
+	Driver     string
+	Scope      string
+	Internal   bool
+	Attachable bool
+	Ingress    bool
+	Created    time.Time
+	Labels     map[string]string
+	Options    map[string]string
+}
+
+type NetworkSpec struct {
+	Name       string
+	Driver     string
+	Internal   bool
+	Attachable bool
+	Labels     map[string]string
+	Options    map[string]string
+}
+
+type ExecConfig struct {
+	ContainerID  string
+	AttachStdin  bool
+	AttachStdout bool
+	AttachStderr bool
+	Tty          bool
+	Cmd          []string
+	Env          []string
+	WorkingDir   string
+	User         string
+}
+
+type ExecSession struct {
+	ID          string
+	ContainerID string
+	Running     bool
+	ExitCode    int
+	Config      ExecConfig
+}
+
+type Event struct {
+	Type     string     `json:"Type"`
+	Action   string     `json:"Action"`
+	Actor    EventActor `json:"Actor"`
+	Time     int64      `json:"time"`
+	TimeNano int64      `json:"timeNano"`
+}
+
+type EventActor struct {
+	ID         string            `json:"ID"`
+	Attributes map[string]string `json:"Attributes"`
+}
+
+type AuthResult struct {
+	Status        string `json:"Status"`
+	IdentityToken string `json:"IdentityToken,omitempty"`
+}
+
+type PruneResult struct {
+	Deleted        []string `json:"Deleted,omitempty"`
+	SpaceReclaimed uint64   `json:"SpaceReclaimed"`
+}
+
 type ListContainersOptions struct {
 	All    bool
 	Limit  int
@@ -163,4 +274,13 @@ type LogOptions struct {
 	Until      string
 	Timestamps bool
 	Tail       string
+}
+
+type ArchiveOptions struct {
+	Path string
+}
+
+type ResizeOptions struct {
+	Height int
+	Width  int
 }

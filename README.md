@@ -94,28 +94,28 @@ Status meanings:
 | Implemented | `POST /containers/{id}/stop` | `docker stop` | Memory backend changes state to `exited`. |
 | Implemented | `DELETE /containers/{id}` | `docker rm` | Supports force/remove-volume flags at API shape level. |
 | Implemented | `GET /containers/{id}/logs` | `docker logs` | Route exists; real logs are backend-dependent. |
-| Planned | `POST /containers/{id}/restart` | `docker restart` | Can be built from stop/start if backend supports both. |
-| Planned | `POST /containers/{id}/kill` | `docker kill` | Requires backend signal/terminate support. |
-| Planned | `POST /containers/{id}/pause` | `docker pause` | Backend-dependent. |
-| Planned | `POST /containers/{id}/unpause` | `docker unpause` | Backend-dependent. |
-| Planned | `GET /containers/{id}/stats` | `docker stats` | Requires backend metrics stream. |
-| Planned | `GET /containers/{id}/top` | `docker top` | Requires backend process listing. |
-| Planned | `GET /containers/{id}/changes` | `docker diff` | Requires filesystem change tracking. |
-| Planned | `GET /containers/{id}/archive` | `docker cp` from container | Requires backend filesystem archive support. |
-| Planned | `PUT /containers/{id}/archive` | `docker cp` to container | Requires backend filesystem archive support. |
-| Planned | `POST /containers/{id}/attach` | `docker attach` | Requires HTTP hijack/raw stream support. |
-| Planned | `POST /containers/{id}/resize` | `docker resize` | Requires TTY resize support. |
-| Planned | `POST /containers/prune` | `docker container prune` | Can be implemented after lifecycle behavior is real. |
+| Implemented | `POST /containers/{id}/restart` | `docker restart` | Memory backend simulates stop/start. |
+| Implemented | `POST /containers/{id}/kill` | `docker kill` | Memory backend records an exited state. |
+| Implemented | `POST /containers/{id}/pause` | `docker pause` | Memory backend supports state transitions; Apple support is capability-dependent. |
+| Implemented | `POST /containers/{id}/unpause` | `docker unpause` | Memory backend supports state transitions; Apple support is capability-dependent. |
+| Implemented | `GET /containers/{id}/stats` | `docker stats` | Returns Docker-shaped metrics; live Apple metrics remain backend-dependent. |
+| Implemented | `GET /containers/{id}/top` | `docker top` | Returns Docker-shaped process data. |
+| Implemented | `GET /containers/{id}/changes` | `docker diff` | Route and translation exist; real change tracking is backend-dependent. |
+| Implemented | `GET /containers/{id}/archive` | `docker cp` from container | Streams a tar archive. |
+| Implemented | `PUT /containers/{id}/archive` | `docker cp` to container | Accepts a tar archive. |
+| Implemented | `POST /containers/{id}/attach` | `docker attach` | Raw-stream response exists; production hijacking depends on the Apple backend. |
+| Implemented | `POST /containers/{id}/resize` | `docker resize` | API shape exists; backend TTY support is required. |
+| Implemented | `POST /containers/prune` | `docker container prune` | Docker-compatible prune response fields are returned. |
 
 ### Exec and Streaming
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Planned | `POST /containers/{id}/exec` | `docker exec` | Requires backend exec capability. |
-| Planned | `POST /exec/{id}/start` | `docker exec` | Requires raw stream/hijack handling. |
-| Planned | `GET /exec/{id}/json` | `docker inspect` for exec | Requires exec session state. |
-| Planned | `POST /exec/{id}/resize` | `docker exec -it` resize | Requires backend TTY resize support. |
-| Planned | `GET /events` | `docker events` | Requires backend event stream and Docker event translation. |
+| Implemented | `POST /containers/{id}/exec` | `docker exec` | Creates an exec session. |
+| Implemented | `POST /exec/{id}/start` | `docker exec` | Streams backend output using Docker's raw-stream content type. |
+| Implemented | `GET /exec/{id}/json` | `docker inspect` for exec | Returns Docker-shaped exec state. |
+| Implemented | `POST /exec/{id}/resize` | `docker exec -it` resize | API shape exists; backend TTY support is required. |
+| Implemented | `GET /events` | `docker events` | Streams Docker-shaped event JSON. |
 
 ### Images and Registry
 
@@ -124,34 +124,34 @@ Status meanings:
 | Implemented | `GET /images/json` | `docker images`, `docker image ls` | Memory backend lists simulated images. |
 | Implemented | `POST /images/create` | `docker pull` | Memory backend simulates pull progress. |
 | Implemented | `DELETE /images/{id}` | `docker rmi` | Memory backend removes simulated images. |
-| Planned | `GET /images/{id}/json` | `docker image inspect` | Requires backend image metadata. |
-| Planned | `GET /images/{id}/history` | `docker history` | Backend-dependent; may be unavailable. |
-| Planned | `POST /images/{name}/push` | `docker push` | Depends on registry authentication and backend registry support. |
-| Planned | `POST /images/load` | `docker load` | Requires image import support. |
-| Planned | `GET /images/{name}/get` | `docker save` | Requires image export support. |
-| Planned | `POST /images/prune` | `docker image prune` | Can be implemented after real image storage integration. |
+| Implemented | `GET /images/{id}/json` | `docker image inspect` | Returns Docker-shaped image metadata. |
+| Implemented | `GET /images/{id}/history` | `docker history` | Route exists; complete history remains backend-dependent. |
+| Implemented | `POST /images/{name}/push` | `docker push` | Streams backend push progress. |
+| Implemented | `POST /images/load` | `docker load` | Accepts an image archive and streams progress. |
+| Implemented | `GET /images/{name}/get` | `docker save` | Streams an image tar archive. |
+| Implemented | `POST /images/prune` | `docker image prune` | Returns Docker-compatible prune fields. |
 
 ### Volumes
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Planned | `GET /volumes` | `docker volume ls` | Requires mapping to Apple/backend storage model. |
-| Planned | `POST /volumes/create` | `docker volume create` | Backend-dependent. |
-| Planned | `GET /volumes/{name}` | `docker volume inspect` | Backend-dependent. |
-| Planned | `DELETE /volumes/{name}` | `docker volume rm` | Backend-dependent. |
-| Planned | `POST /volumes/prune` | `docker volume prune` | Backend-dependent. |
+| Implemented | `GET /volumes` | `docker volume ls` | Memory backend provides Docker-shaped volume data. |
+| Implemented | `POST /volumes/create` | `docker volume create` | Apple storage mapping remains backend-dependent. |
+| Implemented | `GET /volumes/{name}` | `docker volume inspect` | Apple storage mapping remains backend-dependent. |
+| Implemented | `DELETE /volumes/{name}` | `docker volume rm` | Apple storage mapping remains backend-dependent. |
+| Implemented | `POST /volumes/prune` | `docker volume prune` | Returns Docker-compatible prune fields. |
 
 ### Networks
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Planned | `GET /networks` | `docker network ls` | Requires mapping to Apple/backend networking model. |
-| Planned | `POST /networks/create` | `docker network create` | Backend-dependent. |
-| Planned | `GET /networks/{id}` | `docker network inspect` | Backend-dependent. |
-| Planned | `POST /networks/{id}/connect` | `docker network connect` | Backend-dependent. |
-| Planned | `POST /networks/{id}/disconnect` | `docker network disconnect` | Backend-dependent. |
-| Planned | `DELETE /networks/{id}` | `docker network rm` | Backend-dependent. |
-| Planned | `POST /networks/prune` | `docker network prune` | Backend-dependent. |
+| Implemented | `GET /networks` | `docker network ls` | Memory backend includes bridge, host, and none networks. |
+| Implemented | `POST /networks/create` | `docker network create` | Apple networking mapping remains backend-dependent. |
+| Implemented | `GET /networks/{id}` | `docker network inspect` | Apple networking mapping remains backend-dependent. |
+| Implemented | `POST /networks/{id}/connect` | `docker network connect` | Apple networking mapping remains backend-dependent. |
+| Implemented | `POST /networks/{id}/disconnect` | `docker network disconnect` | Apple networking mapping remains backend-dependent. |
+| Implemented | `DELETE /networks/{id}` | `docker network rm` | Apple networking mapping remains backend-dependent. |
+| Implemented | `POST /networks/prune` | `docker network prune` | Returns Docker-compatible prune fields. |
 
 ### Build and Compose
 
@@ -165,7 +165,7 @@ Status meanings:
 
 | Status | Docker API | Docker CLI | Notes |
 | --- | --- | --- | --- |
-| Planned | `POST /auth` | `docker login` | Can be forwarded if Apple/backend owns registry credentials. Otherwise the adapter needs credential storage. |
+| Implemented | `POST /auth` | `docker login` | Forwards the registry-auth payload; secure credential persistence remains backend-dependent. |
 
 ### Not Planned or Not Implementable as an Adapter
 
@@ -319,14 +319,11 @@ Backend errors should be converted into Docker-compatible HTTP status codes and 
 
 ### Streaming
 
-The current code includes a basic logs endpoint shape. Real streaming support still needs backend integration for:
-
-- `docker logs -f`
-- `docker attach`
-- `docker exec`
-- `docker events`
+The API layer exposes logs, attach, exec, and event streams with Docker content types and response shapes. The memory backend provides deterministic test streams. Long-lived streams, bidirectional stdin, and HTTP connection hijacking require the Apple backend transport.
 
 ## MVP Roadmap
+
+Phases 1 through 4 and the volume/network API surface in Phase 5 are implemented against the memory backend. Production completion means replacing each Apple backend `ErrNotImplemented` stub with an `container-apiserver` call and validating behavior with the Docker CLI.
 
 ### Phase 1: Read-only Docker CLI compatibility
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/bytepengfei/container-docker-adapter/internal/backend"
@@ -45,4 +46,16 @@ func (c *SystemController) Info(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+func (c *SystemController) Events(w http.ResponseWriter, r *http.Request) {
+	events, err := c.backend.Events(r.Context())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	defer events.Close()
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, events)
 }
