@@ -37,6 +37,8 @@ jobs:
       - run: brew style /tmp/container-docker-adapter.rb
       - name: Audit formula in a temporary tap
         run: |
+          git config --global user.name "container-docker-adapter CI"
+          git config --global user.email "bytepengfei@users.noreply.github.com"
           brew tap-new bytepengfei/ci-tap
           trap 'brew untap bytepengfei/ci-tap' EXIT
           tap="$(brew --repository)/Library/Taps/bytepengfei/homebrew-ci-tap"
