@@ -41,4 +41,4 @@ jobs:
           trap 'brew untap bytepengfei/ci-tap' EXIT
           tap="$(brew --repository)/Library/Taps/bytepengfei/homebrew-ci-tap"
           cp /tmp/container-docker-adapter.rb "$tap/Formula/container-docker-adapter.rb"
-          brew audit --strict bytepengfei/ci-tap/container-docker-adapter
+          brew audit --strict --arch arm bytepengfei/ci-tap/container-docker-adapter
