@@ -9,26 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  apple-e2e:
-    runs-on:
-      - self-hosted
-      - macOS
-      - ARM64
-      - apple-container
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.25.x"
-          cache: true
-      - name: Verify Apple Container system
-        run: container system status
-      - name: Run real Apple Container E2E
-        run: APPLE_CONTAINER_E2E=1 ./scripts/e2e-apple.sh
-
   release:
-    needs:
-      - apple-e2e
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

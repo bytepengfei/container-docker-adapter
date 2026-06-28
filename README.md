@@ -377,13 +377,25 @@ container-docker-adapter setup --socket /tmp/apple-docker.sock
 
 ## Release
 
-Stable releases are created from `v*` tags. The release workflow:
+Stable releases are created from `v*` tags. Validate each release manually on the Apple Silicon development Mac:
 
-1. Runs the real Apple E2E suite on a self-hosted Apple Silicon runner labelled `apple-container`.
-2. Publishes darwin/arm64 binary and source archives with checksums.
-3. Updates `bytepengfei/homebrew-tap`.
+```sh
+./scripts/pre-release.sh v0.1.0
+```
 
-Configure a fine-grained `TAP_GITHUB_TOKEN` secret with Contents write access to the tap repository. Without the self-hosted E2E runner or tap token, a stable release intentionally cannot complete.
+This requires a clean worktree and runs unit tests, `go vet`, and the real Apple Container E2E suite. After it passes:
+
+```sh
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin v0.1.0
+```
+
+GitHub Actions then:
+
+1. Publishes darwin/arm64 binary and source archives with checksums.
+2. Updates `bytepengfei/homebrew-tap`.
+
+Configure a fine-grained `TAP_GITHUB_TOKEN` secret with Contents write access to the tap repository. No self-hosted GitHub runner is required; the maintainer is responsible for running the local pre-release validation before pushing a stable tag.
 
 ## Architecture
 
