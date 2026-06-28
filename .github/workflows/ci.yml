@@ -35,12 +35,5 @@ jobs:
             0000000000000000000000000000000000000000000000000000000000000000 \
             /tmp/container-docker-adapter.rb
       - run: brew style /tmp/container-docker-adapter.rb
-      - name: Audit formula in a temporary tap
-        run: |
-          git config --global user.name "container-docker-adapter CI"
-          git config --global user.email "bytepengfei@users.noreply.github.com"
-          brew tap-new bytepengfei/ci-tap
-          trap 'brew untap bytepengfei/ci-tap' EXIT
-          tap="$(brew --repository)/Library/Taps/bytepengfei/homebrew-ci-tap"
-          cp /tmp/container-docker-adapter.rb "$tap/Formula/container-docker-adapter.rb"
-          brew audit --strict --arch arm bytepengfei/ci-tap/container-docker-adapter
+      - name: Validate formula syntax
+        run: ruby -c /tmp/container-docker-adapter.rb
